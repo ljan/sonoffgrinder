@@ -1,13 +1,9 @@
 #include <Arduino.h>
-
 // Libraries
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
 #include <TTBOUNCE.h>
 #include <EEPROM.h>
-extern "C" {
-#include "user_interface.h"
-}
 
 //======SERVER PART======================================================
 const char* ssid     = "kaffee";
@@ -17,11 +13,10 @@ char htmlResponse[3000];
 //======LOKALER PART======================================================
 os_timer_t myTimer;
 bool tickOccured = false;
-bool timerrunning = false;
 bool pressOccured = false;
 bool wifiStatus = false;
-int RelaisPin = 12;
-// GPIO13 Gruene LED auf dem Sonoff
+int grinderPin = 12;
+int ledPin = 13;
 TTBOUNCE button = TTBOUNCE(14);
 
 int time_ss = 1000;
@@ -29,89 +24,76 @@ int time_ds = 2000;
 int time_max = 15000;
 int holdTime = 0;
 
-void press(){
-   if (!timerrunning)
-   {
-     digitalWrite(RelaisPin, HIGH);  // turn Relais ON
-     os_timer_arm(&myTimer, time_max, false);
-     timerrunning = true;
-     pressOccured = true;
-     Serial.println("Pressed");
-     Serial.println("Relais ON");
-   }
-  else
-     {
-     tickOccured = false;
-     digitalWrite(RelaisPin, LOW);
-     os_timer_disarm(&myTimer);
-     timerrunning = false;
-     pressOccured = false;
-     Serial.println("Abort!");
-     Serial.println("Relais OFF");
-     }
+unsigned int debounceInterval = 50;
+unsigned int pressInterval = 500;
+
+void click() {
+  if (digitalRead(grinderPin) == LOW) {
+    digitalWrite(grinderPin, HIGH);  // turn Relais ON
+    os_timer_arm(&myTimer, time_ss, false);
+    Serial.println("Clicked");
+    Serial.println("Relais ON");
+  } else {
+    tickOccured = false;
+    digitalWrite(grinderPin, LOW);
+    os_timer_disarm(&myTimer);
+    Serial.println("Abort!");
+    Serial.println("Relais OFF");
+  }
 }
 
-void click(){
-   if (!timerrunning)
-   {
-     digitalWrite(RelaisPin, HIGH);  // turn Relais ON
-     os_timer_arm(&myTimer, time_ss, false);
-     timerrunning = true;
-     Serial.println("Clicked");
-     Serial.println("Relais ON");
-   }
-   else
-     {
-     tickOccured = false;
-     digitalWrite(RelaisPin, LOW);
-     os_timer_disarm(&myTimer);
-     timerrunning = false;
-     Serial.println("Abort!");
-     Serial.println("Relais OFF");
-     }
+void doubleClick() {
+  if (digitalRead(grinderPin) == LOW) {
+    digitalWrite(grinderPin, HIGH);  // turn Relais ON
+    os_timer_arm(&myTimer, time_ds, false);
+    Serial.println("DoubleClicked");
+    Serial.println("Relais ON");
+  } else {
+    tickOccured = false;
+    digitalWrite(grinderPin, LOW);
+    os_timer_disarm(&myTimer);
+    Serial.println("Abort!");
+    Serial.println("Relais OFF");
+  }
 }
 
-void doubleClick(){
-     if (!timerrunning)
-   {
-     digitalWrite(RelaisPin, HIGH);  // turn Relais ON
-     os_timer_arm(&myTimer, time_ds, false);
-     timerrunning = true;
-     Serial.println("DoubleClicked");
-     Serial.println("Relais ON");
-   }
-     else
-     {
-     tickOccured = false;
-     digitalWrite(RelaisPin, LOW);
-     os_timer_disarm(&myTimer);
-     timerrunning = false;
-     Serial.println("Abort!");
-     Serial.println("Relais OFF");
-     }
+void press() {
+  if(digitalRead(grinderPin) == LOW) {
+    digitalWrite(grinderPin, HIGH);  // turn Relais ON
+    os_timer_arm(&myTimer, time_max, false);
+    pressOccured = true;
+    Serial.println("Pressed");
+    Serial.println("Relais ON");
+  } else {
+    tickOccured = false;
+    digitalWrite(grinderPin, LOW);
+    os_timer_disarm(&myTimer);
+    pressOccured = false;
+    Serial.println("Abort!");
+    Serial.println("Relais OFF");
+  }
 }
 
-  void eeWriteInt(int pos, int val) {
-     byte* p = (byte*) &val;
-     EEPROM.write(pos, *p);
-     EEPROM.write(pos + 1, *(p + 1));
-     EEPROM.write(pos + 2, *(p + 2));
-     EEPROM.write(pos + 3, *(p + 3));
-     EEPROM.commit();
+void eeWriteInt(int pos, int val) {
+  byte* p = (byte*) &val;
+  EEPROM.write(pos, *p);
+  EEPROM.write(pos + 1, *(p + 1));
+  EEPROM.write(pos + 2, *(p + 2));
+  EEPROM.write(pos + 3, *(p + 3));
+  EEPROM.commit();
 }
 
 int eeGetInt(int pos) {
-   int val;
-   byte* p = (byte*) &val;
-   *p        = EEPROM.read(pos);
-   *(p + 1)  = EEPROM.read(pos + 1);
-   *(p + 2)  = EEPROM.read(pos + 2);
-   *(p + 3)  = EEPROM.read(pos + 3);
-   return val;
+  int val;
+  byte* p = (byte*) &val;
+  *p        = EEPROM.read(pos);
+  *(p + 1)  = EEPROM.read(pos + 1);
+  *(p + 2)  = EEPROM.read(pos + 2);
+  *(p + 3)  = EEPROM.read(pos + 3);
+  return val;
 }
 
 void handleRoot() {
-
    snprintf ( htmlResponse, 3000,
               "<!DOCTYPE html>\
               <html lang=\"en\">\
@@ -148,32 +130,31 @@ void handleRoot() {
               time_ss,
               time_ds
             );
-
     server.send ( 200, "text/html", htmlResponse );
-
 }
 
 void handleSave() {
-   if (server.arg("ss")!= ""){
-     Serial.println("Singleshot: " + server.arg("ss"));
-     time_ss = server.arg("ss").toInt();
-     eeWriteInt(0, server.arg("ss").toInt());
-   }
-     if (server.arg("ds")!= ""){
-     Serial.println("Doubleshot: " + server.arg("ds"));
-     time_ds = server.arg("ds").toInt();
-     eeWriteInt(4, server.arg("ds").toInt());
-   }
+  if (server.arg("ss")!= "") {
+    Serial.println("Singleshot: " + server.arg("ss"));
+    time_ss = server.arg("ss").toInt();
+    eeWriteInt(0, server.arg("ss").toInt());
+  }
+  if (server.arg("ds")!= "") {
+    Serial.println("Doubleshot: " + server.arg("ds"));
+    time_ds = server.arg("ds").toInt();
+    eeWriteInt(4, server.arg("ds").toInt());
+  }
 
 }
 
+// handle WiFi and coonect if not connected
 void handleWifi() {
-  // Connecting to a WiFi network
   static bool oldWifiStaus = false;
-  static int wifi_start = millis();
-  int wifi_int = 30000;
+  static unsigned long wifi_start = millis();
+  unsigned long wifi_int = 30000;
   
   if (WiFi.status() != WL_CONNECTED && millis() > wifi_start + wifi_int) {
+    // Connecting to a WiFi network
     Serial.println("WiFi not connected");
     Serial.print("Connecting to: ");
     Serial.println(ssid);
@@ -183,6 +164,7 @@ void handleWifi() {
   }
   
   if (oldWifiStaus == false && WiFi.status() == WL_CONNECTED) {
+    // Connected to WiFi
     Serial.println("WiFi connected");
     Serial.println("IP address: ");
     Serial.println(WiFi.localIP());
@@ -196,20 +178,20 @@ void timerCallback(void *pArg) {
   tickOccured = true;
 }
 
+
+// *******SETUP*******
 void setup() {
-// Start serial
-  Serial.begin(115200);
-  delay(10);
+  Serial.begin(115200); // Start serial
 
 //======HARDWARE PART======================================================
-  pinMode(RelaisPin, OUTPUT);       // GPIO12 als Ausgang definieren
-  digitalWrite(RelaisPin, LOW);  // turn Relais OFF
+  pinMode(grinderPin, OUTPUT);     // define grinder output pin
+  digitalWrite(grinderPin, LOW);   // turn Relais OFF
 
 //======Wifi PART==========================================================
-  Serial.println("not connected to Wifi");
   Serial.print("Connecting to: ");
   Serial.println(ssid);
   WiFi.begin(ssid, password);
+  yield();
 
 //======SERVER PART=======================================================
   server.on ( "/", handleRoot );
@@ -222,33 +204,34 @@ void setup() {
   os_timer_setfn(&myTimer, timerCallback, NULL);
 //  button.enablePullup(); button.setActiveLow();             //ebable internal pullup
   button.disablePullup(); button.setActiveHigh();             // no not enable internale pullup - needs externel pulldown to GND
-  button.setDebounceInterval(50);
+  button.setDebounceInterval(debounceInterval);
+  button.setPressInterval(pressInterval);
   button.attachClick(click);         //attach the click method to the click event
   button.attachDoubleClick(doubleClick);//attach the double click method to the double click event
   button.attachPress(press);        //attach the press method to the press event
-  tickOccured = false;
-  timerrunning = false;
+  
   EEPROM.begin(8);  //Initialize EEPROM
   time_ss = eeGetInt(0);
   time_ds = eeGetInt(4);
 }
 
+// *******LOOP*******
 void loop() {
 //======SERVER PART======================================================
-   server.handleClient();
+  handleWifi(); // check Wifi
+  server.handleClient();
+  yield();
 //======LOKALER PART======================================================
-   button.update();
+  button.update();
 
-  if (pressOccured == true) // ein Gedrückthalten wurde erkannt
-  {
-    if (button.getHoldTime() > 0)
-    {
-      holdTime = (int)button.getHoldTime();
+  if (pressOccured == true) {
+    // press was detected
+    if (button.getHoldTime() > 0) {
+      holdTime = (int)button.getHoldTime(); // hold button time
     }
-    if (button.read() == LOW) // warten auf loslassen
-    {
-      // nach loslassen doublshot Zeit speichern
-      eeWriteInt(4, holdTime);
+    if (button.read() == LOW) { // wait for button release
+      holdTime = holdTime - pressInterval; // substract press detection time from hold time
+      eeWriteInt(4, holdTime); // safe doublshot time
       tickOccured = true;
       pressOccured = false;
       time_ds = holdTime;
@@ -256,18 +239,12 @@ void loop() {
     }
   }
 
-  if (tickOccured == true)
-  {
+  if (tickOccured == true) {
      tickOccured = false;
-     digitalWrite(RelaisPin, LOW);
+     digitalWrite(grinderPin, LOW);
      Serial.println("Timer ausgelaufen");
      Serial.println("Relais OFF");
      os_timer_disarm(&myTimer);
-     timerrunning = false;
   }
 
-  handleWifi(); // check Wifi
-
-  yield();  // or delay(0);
 }
-
