@@ -19,6 +19,7 @@ os_timer_t myTimer;
 bool tickOccured = false;
 bool timerrunning = false;
 bool pressOccured = false;
+bool wifiStatus = false;
 int RelaisPin = 12;
 // GPIO13 Gruene LED auf dem Sonoff
 TTBOUNCE button = TTBOUNCE(14);
@@ -27,8 +28,6 @@ int time_ss = 1000;
 int time_ds = 2000;
 int time_max = 15000;
 int holdTime = 0;
-
-int attemptMax = 30000;
 
 void press(){
    if (!timerrunning)
@@ -168,13 +167,36 @@ void handleSave() {
 
 }
 
+void handleWifi() {
+  // Connecting to a WiFi network
+  static bool oldWifiStaus = false;
+  static int wifi_start = millis();
+  int wifi_int = 30000;
+  
+  if (WiFi.status() != WL_CONNECTED && millis() > wifi_start + wifi_int) {
+    Serial.println("WiFi not connected");
+    Serial.print("Connecting to: ");
+    Serial.println(ssid);
+    WiFi.begin(ssid, password);
+    oldWifiStaus = false;
+    wifi_start = millis();
+  }
+  
+  if (oldWifiStaus == false && WiFi.status() == WL_CONNECTED) {
+    Serial.println("WiFi connected");
+    Serial.println("IP address: ");
+    Serial.println(WiFi.localIP());
+    oldWifiStaus = true;
+  }
+
+}
+
 // start of timerCallback
 void timerCallback(void *pArg) {
   tickOccured = true;
 }
 
 void setup() {
-  int startwifi = millis();
 // Start serial
   Serial.begin(115200);
   delay(10);
@@ -183,32 +205,19 @@ void setup() {
   pinMode(RelaisPin, OUTPUT);       // GPIO12 als Ausgang definieren
   digitalWrite(RelaisPin, LOW);  // turn Relais OFF
 
-//======SERVER PART======================================================
-// Connecting to a WiFi network
-  Serial.println();
-  Serial.println();
-  Serial.print("Connecting to ");
+//======Wifi PART==========================================================
+  Serial.println("not connected to Wifi");
+  Serial.print("Connecting to: ");
   Serial.println(ssid);
-
   WiFi.begin(ssid, password);
 
-  while (WiFi.status() != WL_CONNECTED || millis() >= startwifi + attemptMax) {
-    delay(500);
-    Serial.print(".");
-  }
-
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("");
-    Serial.println("WiFi connected");
-    Serial.println("IP address: ");
-    Serial.println(WiFi.localIP());
-  }
-
+//======SERVER PART=======================================================
   server.on ( "/", handleRoot );
   server.on ("/save", handleSave);
 
   server.begin();
   Serial.println ( "HTTP server started" );
+
 //======LOKALER PART======================================================
   os_timer_setfn(&myTimer, timerCallback, NULL);
 //  button.enablePullup(); button.setActiveLow();             //ebable internal pullup
@@ -256,6 +265,8 @@ void loop() {
      os_timer_disarm(&myTimer);
      timerrunning = false;
   }
+
+  handleWifi(); // check Wifi
 
   yield();  // or delay(0);
 }
