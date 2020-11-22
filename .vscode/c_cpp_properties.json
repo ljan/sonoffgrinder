@@ -6,12 +6,12 @@
         {
             "name": "Win32",
             "includePath": [
-                "c:/Users/janle/Documents/PlatformIO/Projects/grinder/include",
-                "c:/Users/janle/Documents/PlatformIO/Projects/grinder/src",
+                "c:/Users/janle/Documents/GitHub/sonoffgrinder/include",
+                "c:/Users/janle/Documents/GitHub/sonoffgrinder/src",
                 "C:/Users/janle/.platformio/packages/framework-arduinoespressif8266/libraries/ESP8266WebServer/src",
                 "C:/Users/janle/.platformio/packages/framework-arduinoespressif8266/libraries/ESP8266WiFi/src",
                 "C:/Users/janle/.platformio/packages/framework-arduinoespressif8266/libraries/EEPROM",
-                "c:/Users/janle/Documents/PlatformIO/Projects/grinder/.pio/libdeps/sonoff_basic/TTBOUNCE",
+                "c:/Users/janle/Documents/GitHub/sonoffgrinder/.pio/libdeps/sonoff_basic/TTBOUNCE",
                 "C:/Users/janle/.platformio/packages/framework-arduinoespressif8266/tools/sdk/include",
                 "C:/Users/janle/.platformio/packages/framework-arduinoespressif8266/tools/sdk/libc/xtensa-lx106-elf/include",
                 "C:/Users/janle/.platformio/packages/framework-arduinoespressif8266/cores/esp8266",
@@ -52,12 +52,12 @@
             "browse": {
                 "limitSymbolsToIncludedHeaders": true,
                 "path": [
-                    "c:/Users/janle/Documents/PlatformIO/Projects/grinder/include",
-                    "c:/Users/janle/Documents/PlatformIO/Projects/grinder/src",
+                    "c:/Users/janle/Documents/GitHub/sonoffgrinder/include",
+                    "c:/Users/janle/Documents/GitHub/sonoffgrinder/src",
                     "C:/Users/janle/.platformio/packages/framework-arduinoespressif8266/libraries/ESP8266WebServer/src",
                     "C:/Users/janle/.platformio/packages/framework-arduinoespressif8266/libraries/ESP8266WiFi/src",
                     "C:/Users/janle/.platformio/packages/framework-arduinoespressif8266/libraries/EEPROM",
-                    "c:/Users/janle/Documents/PlatformIO/Projects/grinder/.pio/libdeps/sonoff_basic/TTBOUNCE",
+                    "c:/Users/janle/Documents/GitHub/sonoffgrinder/.pio/libdeps/sonoff_basic/TTBOUNCE",
                     "C:/Users/janle/.platformio/packages/framework-arduinoespressif8266/tools/sdk/include",
                     "C:/Users/janle/.platformio/packages/framework-arduinoespressif8266/tools/sdk/libc/xtensa-lx106-elf/include",
                     "C:/Users/janle/.platformio/packages/framework-arduinoespressif8266/cores/esp8266",
