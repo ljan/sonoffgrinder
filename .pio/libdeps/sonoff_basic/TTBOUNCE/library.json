@@ -1,0 +1,22 @@
+{
+  "name": "TTBOUNCE",
+  "keywords": "Button, Switch, debounce, click, doubleclick",
+  "description": "This is a debouncing button library for Arduino.",
+  "repository":
+  {
+    "type": "git",
+    "url": "https://github.com/TOLDOTECHNIK/TTBOUNCE.git"
+  },
+  "authors":
+  [
+    {
+      "name": "TOLDO TECHNIK",
+      "email": "info@toldotechnik.li",
+      "url": "http://www.toldotechnik.li",
+      "maintainer": true
+    }
+  ],
+  "version": "1.4.0",
+  "frameworks": "arduino",
+  "platforms": "*"
+}
