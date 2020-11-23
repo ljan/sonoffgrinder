@@ -10,4 +10,4 @@
 .vscode/c_cpp_properties.json
 .vscode/launch.json
 .vscode/ipch
-.pio
+.pio/*
