@@ -5,6 +5,9 @@
 #include <TTBOUNCE.h>
 #include <EEPROM.h>
 
+#define ON LOW    // LOW is LED ON
+#define OFF HIGH  // HIGH is LED OFF
+
 //======SERVER PART======================================================
 const char* ssid     = "kaffee";
 const char* password = "kaffeekaffee";
@@ -17,7 +20,7 @@ bool pressOccured = false;
 bool wifiStatus = false;
 int grinderPin = 12;
 int ledPin = 13;
-TTBOUNCE button = TTBOUNCE(14);
+TTBOUNCE button = TTBOUNCE(14);  // GPIO 14, last PIN on Header
 
 int time_ss = 1000;
 int time_ds = 2000;
@@ -32,13 +35,15 @@ void click() {
     digitalWrite(grinderPin, HIGH);  // turn Relais ON
     os_timer_arm(&myTimer, time_ss, false);
     Serial.println("Clicked");
-    Serial.println("Relais ON");
+    Serial.println("Relais " + String(time_ss, DEC) + " ms ON");
+    digitalWrite(ledPin, ON);
   } else {
     tickOccured = false;
     digitalWrite(grinderPin, LOW);
     os_timer_disarm(&myTimer);
     Serial.println("Abort!");
     Serial.println("Relais OFF");
+    digitalWrite(ledPin, OFF);
   }
 }
 
@@ -47,13 +52,15 @@ void doubleClick() {
     digitalWrite(grinderPin, HIGH);  // turn Relais ON
     os_timer_arm(&myTimer, time_ds, false);
     Serial.println("DoubleClicked");
-    Serial.println("Relais ON");
+    Serial.println("Relais " + String(time_ds, DEC) + " ms ON");
+    digitalWrite(ledPin, ON);
   } else {
     tickOccured = false;
     digitalWrite(grinderPin, LOW);
     os_timer_disarm(&myTimer);
     Serial.println("Abort!");
     Serial.println("Relais OFF");
+    digitalWrite(ledPin, OFF);
   }
 }
 
@@ -64,6 +71,7 @@ void press() {
     pressOccured = true;
     Serial.println("Pressed");
     Serial.println("Relais ON");
+    digitalWrite(ledPin, ON);
   } else {
     tickOccured = false;
     digitalWrite(grinderPin, LOW);
@@ -71,6 +79,7 @@ void press() {
     pressOccured = false;
     Serial.println("Abort!");
     Serial.println("Relais OFF");
+    digitalWrite(ledPin, OFF);
   }
 }
 
@@ -94,7 +103,7 @@ int eeGetInt(int pos) {
 }
 
 void handleRoot() {
-   snprintf ( htmlResponse, 3000,
+   snprintf(htmlResponse, 3000,
               "<!DOCTYPE html>\
               <html lang=\"en\">\
                 <head>\
@@ -125,12 +134,8 @@ void handleRoot() {
                     });\
                   </script>\
                 </body>\
-              </html>",
-
-              time_ss,
-              time_ds
-            );
-    server.send ( 200, "text/html", htmlResponse );
+              </html>", time_ss, time_ds);
+    server.send(200, "text/html", htmlResponse);
 }
 
 void handleSave() {
@@ -147,7 +152,7 @@ void handleSave() {
 
 }
 
-// handle WiFi and coonect if not connected
+// handle WiFi and connect if not connected
 void handleWifi() {
   static bool oldWifiStaus = false;
   static unsigned long wifi_start = millis();
@@ -156,7 +161,7 @@ void handleWifi() {
   if (WiFi.status() != WL_CONNECTED && millis() > wifi_start + wifi_int) {
     // Connecting to a WiFi network
     Serial.println("WiFi not connected");
-    Serial.print("Connecting to: ");
+    Serial.print("Trying to connect to: ");
     Serial.println(ssid);
     WiFi.begin(ssid, password);
     oldWifiStaus = false;
@@ -184,8 +189,12 @@ void setup() {
   Serial.begin(115200); // Start serial
 
 //======HARDWARE PART======================================================
-  pinMode(grinderPin, OUTPUT);     // define grinder output pin
-  digitalWrite(grinderPin, LOW);   // turn Relais OFF
+  pinMode(grinderPin, OUTPUT);      // define grinder output pin
+  digitalWrite(grinderPin, LOW);    // turn Relais OFF
+  pinMode(ledPin, OUTPUT);
+  digitalWrite(ledPin, ON);         // turn LED ON at start
+
+  pinMode(14, INPUT_PULLUP);        // Bugfix ttbounce button.enablePullup(); not working
 
 //======Wifi PART==========================================================
   Serial.print("Connecting to: ");
@@ -202,17 +211,18 @@ void setup() {
 
 //======LOKALER PART======================================================
   os_timer_setfn(&myTimer, timerCallback, NULL);
-//  button.enablePullup(); button.setActiveLow();             //ebable internal pullup
-  button.disablePullup(); button.setActiveHigh();             // no not enable internale pullup - needs externel pulldown to GND
+  button.setActiveLow(); button.enablePullup();   // button from GPIO directly to GND, ebable internal pullup
   button.setDebounceInterval(debounceInterval);
   button.setPressInterval(pressInterval);
-  button.attachClick(click);         //attach the click method to the click event
-  button.attachDoubleClick(doubleClick);//attach the double click method to the double click event
-  button.attachPress(press);        //attach the press method to the press event
+  button.attachClick(click);                      //attach the click method to the click event
+  button.attachDoubleClick(doubleClick);          //attach the double click method to the double click event
+  button.attachPress(press);                      //attach the press method to the press event
   
   EEPROM.begin(8);  //Initialize EEPROM
   time_ss = eeGetInt(0);
   time_ds = eeGetInt(4);
+
+  digitalWrite(ledPin, OFF);        // turn LED OFF after Setup
 }
 
 // *******LOOP*******
@@ -244,6 +254,7 @@ void loop() {
      digitalWrite(grinderPin, LOW);
      Serial.println("Timer ausgelaufen");
      Serial.println("Relais OFF");
+     digitalWrite(ledPin, OFF);
      os_timer_disarm(&myTimer);
   }
 
