@@ -13,8 +13,8 @@
 #define OFF HIGH  // HIGH is LED OFF
 
 //======SERVER PART======================================================
-const char* ssid     = "kaffee";
-const char* password = "kaffeekaffee";
+const char* ssid     = "UPC66F2A88";
+const char* password = "c2ncfVemwpnQ";
 ESP8266WebServer server ( 80 );
 char htmlResponse[3000];
 //======LOKALER PART======================================================
@@ -115,11 +115,12 @@ void handleRoot() {
                   <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\
                 </head>\
                 <body>\
-                        <h1>Zeiten für Singleshot und Doubleshot</h1>\
-                        <h3>Singleshot: %d% ms </h3>\
-                        <input type='text' name='date_ss' id='date_ss' size=2 autofocus> ms \
-                        <h3>Doubleshot: %d% ms</h3>\
-                        <input type='text' name='date_ds' id='date_ds' size=2 autofocus> ms \
+                        <h1>Set time for Shot and Timershot</h1>\
+                        <h3>Shot (Click): %d% ms </h3>\
+                        <h3><input type='text' name='date_ss' id='date_ss' size=2 autofocus>  ms</h3> \
+                        <h3>Timershot (Doubleclick): %d% ms</h3>\
+                        <h3><input type='text' name='date_ds' id='date_ds' size=2 autofocus>  ms</h3> \
+                        <h3>You can press and hold the Button.<br> If you do a Doubleclick it will grind the same amount again.</h3>\
                         <div>\
                         <br><button id=\"save_button\">Save</button>\
                         </div>\
@@ -161,7 +162,7 @@ void handleWifi() {
   static bool oldWifiStaus = false;
   static unsigned long wifi_start = millis();
   unsigned long wifi_int = 30000;
-  
+
   if (WiFi.status() != WL_CONNECTED && millis() > wifi_start + wifi_int) {
     // Connecting to a WiFi network
     Serial.println("WiFi not connected");
@@ -171,14 +172,14 @@ void handleWifi() {
     oldWifiStaus = false;
     wifi_start = millis();
   }
-  
+
   if (oldWifiStaus == false && WiFi.status() == WL_CONNECTED) {
     // Connected to WiFi
     Serial.println("WiFi connected");
     Serial.println("IP address: ");
     Serial.println(WiFi.localIP());
     oldWifiStaus = true;
-    
+
     if (!MDNS.begin("sonoffgrinder")) {             // Start the mDNS responder for esp8266.local
       Serial.println("Error setting up MDNS responder!");
     }
@@ -226,7 +227,7 @@ void setup() {
   button.attachClick(click);                      //attach the click method to the click event
   button.attachDoubleClick(doubleClick);          //attach the double click method to the double click event
   button.attachPress(press);                      //attach the press method to the press event
-  
+
   EEPROM.begin(8);  //Initialize EEPROM
   time_ss = eeGetInt(0);
   time_ds = eeGetInt(4);
