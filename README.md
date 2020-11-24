@@ -5,11 +5,14 @@ This is a Coffee Grinder Controller with a Sonoff Basic as a Timer.
 Connect the Motor of the Coffee Grinder to the Output of the Sonoff and the Pushbutton to Pin 14 and Ground.
 
 ## Usage
-When the Button is Pushed with the Portafilter the Grinder is operated.
+
+The Controller tries to connect to  WiFi. Just set up your local Wifi before flashing the Sonoff.
+You can connect to the Sonoff by typing "sonoffgrinder/" in your Webbrowser.
+The Webinterface is presented to programm the grinding time for one and doubleClick.
 
 There are 3 Operation-Modes:
-- Single Push: Grinding for Singleshot Time.
-- Double Push: Grinding for Doubleshot Time.
-- Hold: Setting Doubleshot Time to the Time the Button is helt down.
+- Single Push: Grinding for the Time you set in the Webinterface
+- Hold: Grinding as long as the Button is helt down and safe the time on the Doubleclick
+- Double Push: Grinding the same time like the last grind by push and hold
 
-The Controller tries to connect to a WiFi. There a Webinterface is presented to programm Single- and Doubleshot Times.
+If you push the button again while the machine is grinding the grinder will stop.
