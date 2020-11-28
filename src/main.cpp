@@ -9,16 +9,16 @@
 #include <WiFiUdp.h>
 #include <ArduinoOTA.h>
 // OLED
-//#include "SSD1306Wire.h"
 #include "SSD1306Brzo.h"
 
 #define ON LOW    // LOW is LED ON
 #define OFF HIGH  // HIGH is LED OFF
 
-#define TX 1 // Pin 1 on Sonoff
-#define RX 3 // Pin 3 on Sonoff
+#define SCL 1 // Tx Pin on Sonoff
+#define SDA 3 // Rx Pin on Sonoff
 
 #define VERSION "v0.3-beta"
+#define OVERLAYTIME 5*60*1000
 
 //======SERVER PART======================================================
 const char* ssid     = "kaffee";
@@ -33,7 +33,7 @@ bool wifiStatus = false;
 int grinderPin = 12;
 int ledPin = 13;
 TTBOUNCE button = TTBOUNCE(14);  // GPIO 14, last PIN on Header
-SSD1306Brzo  display(0x3c, RX, TX); // ADDRESS, SDA, SCL
+SSD1306Brzo  display(0x3c, SDA, SCL); // ADDRESS, SDA, SCL
 
 int time_ss = 1000;
 int time_ds = 2000;
@@ -194,8 +194,11 @@ void handleWifi() {
       }
       //Serial.println("mDNS responder started");
     }
-    display.setTextAlignment(TEXT_ALIGN_RIGHT);
-    display.drawString(128, 54, WiFi.localIP().toString());
+    if(millis() < wifi_restart + OVERLAYTIME) {
+      display.setTextAlignment(TEXT_ALIGN_RIGHT);
+      display.setFont(ArialMT_Plain_10);
+      display.drawString(128, 54, WiFi.localIP().toString());
+    }
   }
 
   if (WiFi.status() != WL_CONNECTED) {
@@ -214,6 +217,7 @@ void handleWifi() {
       delay(50); // pauses the sketch and allows WiFi and TCP/IP tasks to run
     }
     display.setTextAlignment(TEXT_ALIGN_RIGHT);
+    display.setFont(ArialMT_Plain_10);
     display.drawString(128, 54, ssid);
   }
 
@@ -228,7 +232,7 @@ void handleDisplay() {
     display.setTextAlignment(TEXT_ALIGN_CENTER);
     display.setFont(ArialMT_Plain_16);
     display.drawString(64, 16, "grinding " + String(relaisTime) + " ms");
-    display.drawProgressBar(0, 38, 120, 10, (millis() - relaisStart) / (relaisTime / 100));
+    display.drawProgressBar(0, 38, 127, 10, (millis() - relaisStart) / (relaisTime / 100));
     //display.drawString(64, 45, String((millis() - relaisStart) / (relaisTime / 100)) + " %");
   }
 
@@ -238,23 +242,26 @@ void handleDisplay() {
     display.setFont(ArialMT_Plain_16);
     display.drawString(128, 16, "grinding " + String(millis() - relaisStart) + " ms");
     display.setTextAlignment(TEXT_ALIGN_CENTER);
-    display.drawProgressBar(0, 38, 120, 10, (millis() - relaisStart) / (relaisTime / 100));
+    display.drawProgressBar(0, 38, 127, 10, (millis() - relaisStart) / (relaisTime / 100));
   }
 
   if(clickOccured == false && pressOccured == false){
     display.setTextAlignment(TEXT_ALIGN_RIGHT);
     display.setFont(ArialMT_Plain_16);
-    display.drawString(128, 16, "Click " + String(time_ss) + " ms");
+    display.drawString(128, 16, "Single " + String(time_ss) + " ms");
     display.drawString(128, 34, "Double " + String(time_ds) + " ms");
   }
   
   // Overlay
-  display.setTextAlignment(TEXT_ALIGN_LEFT);
-  display.setFont(ArialMT_Plain_10);
-  display.drawString(0, 0, "SonoffGrinder");
-  display.setTextAlignment(TEXT_ALIGN_RIGHT);
-  display.setFont(ArialMT_Plain_10);
-  display.drawString(128, 0, VERSION);
+  if(millis() < OVERLAYTIME) {
+    display.setTextAlignment(TEXT_ALIGN_LEFT);
+    display.setFont(ArialMT_Plain_10);
+    display.drawString(0, 0, "SonoffGrinder");
+    display.setTextAlignment(TEXT_ALIGN_RIGHT);
+    display.setFont(ArialMT_Plain_10);
+    display.drawString(128, 0, VERSION);
+  }
+
   display.display();
 }
 
@@ -293,8 +300,8 @@ void setup() {
   yield();
 
 //======SERVER PART=======================================================
-  server.on ( "/", handleRoot );
-  server.on ("/save", handleSave);
+  server.on("/", handleRoot );
+  server.on("/save", handleSave);
 
   server.begin();
   //Serial.println ( "HTTP server started" );
@@ -343,7 +350,7 @@ void setup() {
     display.setTextAlignment(TEXT_ALIGN_CENTER);
     display.setFont(ArialMT_Plain_16);
     display.drawString(64, 10, "OTA Finsihed");
-    display.drawProgressBar(0, 32, 120, 10, 100);
+    display.drawProgressBar(0, 32, 127, 10, 100);
     display.drawString(64, 45, "rebooting..");
     display.display();
     // eeWriteInt(0, 1000); // for testing
@@ -355,7 +362,7 @@ void setup() {
     display.setTextAlignment(TEXT_ALIGN_CENTER);
     display.setFont(ArialMT_Plain_16);
     display.drawString(64, 10, "OTA Update");
-    display.drawProgressBar(0, 32, 120, 10, progress / (total / 100));
+    display.drawProgressBar(0, 32, 127, 10, progress / (total / 100));
     display.drawString(64, 45, String(progress / (total / 100)) + " %");
     display.display();
   });
@@ -365,24 +372,25 @@ void setup() {
     display.setTextAlignment(TEXT_ALIGN_CENTER);
     display.setFont(ArialMT_Plain_16);
     display.drawString(64, 10, "OTA Error");
-    display.drawProgressBar(0, 32, 120, 10, 100);
+    display.drawProgressBar(0, 32, 127, 10, 100);
     if (error == OTA_AUTH_ERROR) {
       //Serial.println("Auth Failed");
-      display.drawString(64, 50, "Auth Failed");
+      display.drawString(64, 45, "Auth Failed");
     } else if (error == OTA_BEGIN_ERROR) {
       //Serial.println("Begin Failed");
-      display.drawString(64, 50, "Begin Failed");
+      display.drawString(64, 45, "Begin Failed");
     } else if (error == OTA_CONNECT_ERROR) {
       //Serial.println("Connect Failed");
-      display.drawString(64, 50, "Connect Failed");
+      display.drawString(64, 45, "Connect Failed");
     } else if (error == OTA_RECEIVE_ERROR) {
       //Serial.println("Receive Failed");
-      display.drawString(64, 50, "Receive Failed");
+      display.drawString(64, 45, "Receive Failed");
     } else if (error == OTA_END_ERROR) {
       //Serial.println("End Failed");
-      display.drawString(64, 50, "End Failed");
+      display.drawString(64, 45, "End Failed");
     }
     display.display();
+    delay(1000);
   });
   ArduinoOTA.begin();
 
@@ -405,7 +413,7 @@ void loop() {
       // while button is pressed
       holdTime = (int)button.getHoldTime(); // hold button time
     }
-    if (button.read() == LOW) { // wait for button release
+    if(button.read() == LOW) { // wait for button release
       holdTime = holdTime - pressInterval; // substract press detection time from hold time
       eeWriteInt(4, holdTime); // safe doublshot time
       pressOccured = false;
