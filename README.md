@@ -3,6 +3,8 @@ This is a Coffee Grinder Controller with a Sonoff Basic as a Timer.
 
 ## Setup
 Connect the Motor of the Coffee Grinder to the Output of the Sonoff and the Pushbutton to Pin 14 and Ground.
+Connect the TX to SCK and RX to SDA of the Display. (0,96" OLED)
+
 
 ## Usage
 
@@ -16,3 +18,5 @@ There are 3 Operation-Modes:
 - Double Push: Grinding the same time like the last grind by push and hold
 
 If you push the button again while the machine is grinding the grinder will stop.
+
+Thanks to timo.helfer @ www.kaffeenetz.de
