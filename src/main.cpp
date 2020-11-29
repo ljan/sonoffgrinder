@@ -17,7 +17,7 @@
 #define SCL 1 // Tx Pin on Sonoff
 #define SDA 3 // Rx Pin on Sonoff
 
-#define VERSION "v0.3-beta"
+#define VERSION "v0.3"
 #define OVERLAYTIME 5*60*1000
 
 //======SERVER PART======================================================
