@@ -153,7 +153,6 @@ void handleRoot() {
                       $.get('/save?ss=' + ss + '&ds=' + ds, function(data){\
                         console.log(data);\
                       });\
-                      location.reload();\
                     });\
                   </script>\
                 </body>\
