@@ -11,3 +11,5 @@
 .vscode/ipch
 ## Platformio
 .pio/*
+.gcc-flags.json
+.clang_complete
