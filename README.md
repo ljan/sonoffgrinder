@@ -20,3 +20,8 @@ There are 3 Operation-Modes:
 If you push the button again while the machine is grinding the grinder will stop.
 
 Thanks to timo.helfer @ www.kaffeenetz.de
+
+
+## Look
+
+[![Video: Sonoffgrinder Display](http://img.youtube.com/vi/cjG6sKxTZSo/0.jpg)](http://www.youtube.com/watch?v=cjG6sKxTZSo "Video: Sonoffgrinder Display")
