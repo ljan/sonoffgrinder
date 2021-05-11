@@ -17,8 +17,8 @@
 #define SCL 1 // Tx Pin on Sonoff
 #define SDA 3 // Rx Pin on Sonoff
 
-#define VERSION "v0.3"
-#define OVERLAYTIME 5*60*1000
+#define VERSION "v0.4"
+#define OVERLAYTIME 5*60*1000 // show additional information for this period
 
 //======SERVER PART======================================================
 const char* ssid     = "kaffee";
@@ -28,16 +28,18 @@ char htmlResponse[3000];
 //======LOKALER PART======================================================
 os_timer_t myTimer;
 bool clickOccured = false;
+bool dclickOccured = false;
 bool pressOccured = false;
 bool wifiStatus = false;
+bool hideOverlay = false;
 int grinderPin = 12;
 int ledPin = 13;
-TTBOUNCE button = TTBOUNCE(14);  // GPIO 14, last PIN on Header
+TTBOUNCE button = TTBOUNCE(14);  // GPIO14, last PIN on Header
 SSD1306Brzo  display(0x3c, SDA, SCL); // ADDRESS, SDA, SCL
 
 int time_ss = 1000;
 int time_ds = 2000;
-int time_max = 15000;
+int time_max = 50000;
 int holdTime = 0;
 int relaisTime = 0;
 unsigned long relaisStart = 0;
@@ -59,6 +61,7 @@ void click() {
     digitalWrite(grinderPin, LOW);
     os_timer_disarm(&myTimer);
     clickOccured = false;
+    dclickOccured = false;
     //Serial.println("Abort!");
     //Serial.println("Relais OFF");
     digitalWrite(ledPin, OFF);
@@ -69,7 +72,7 @@ void doubleClick() {
   if (digitalRead(grinderPin) == LOW) {
     digitalWrite(grinderPin, HIGH);  // turn Relais ON
     os_timer_arm(&myTimer, time_ds, false);
-    clickOccured = true;
+    dclickOccured = true;
     relaisTime = time_ds;
     relaisStart = millis();
     //Serial.println("DoubleClicked");
@@ -79,6 +82,7 @@ void doubleClick() {
     digitalWrite(grinderPin, LOW);
     os_timer_disarm(&myTimer);
     clickOccured = false;
+    dclickOccured = false;
     //Serial.println("Abort!");
     //Serial.println("Relais OFF");
     digitalWrite(ledPin, OFF);
@@ -86,12 +90,14 @@ void doubleClick() {
 }
 
 void press() {
-  if(digitalRead(grinderPin) == LOW) {
+  if(digitalRead(grinderPin) == LOW || (clickOccured == true || dclickOccured == true)) {
     digitalWrite(grinderPin, HIGH);  // turn Relais ON
     os_timer_arm(&myTimer, time_max, false);
     pressOccured = true;
     relaisTime = time_max;
-    relaisStart = millis();
+    if (clickOccured == false && dclickOccured == false) {
+      relaisStart = millis();
+    }
     //Serial.println("Pressed");
     //Serial.println("Relais ON");
     digitalWrite(ledPin, ON);
@@ -103,6 +109,17 @@ void press() {
     //Serial.println("Relais OFF");
     digitalWrite(ledPin, OFF);
   }
+}
+
+void timerCallback(void *pArg) {
+  // start of timerCallback
+  digitalWrite(grinderPin, LOW);
+  //Serial.println("Timer ausgelaufen");
+  //Serial.println("Relais OFF");
+  digitalWrite(ledPin, OFF);
+  os_timer_disarm(&myTimer);
+  clickOccured = false;
+  dclickOccured = false; // TODO besser?
 }
 
 void eeWriteInt(int pos, int val) {
@@ -133,12 +150,12 @@ void handleRoot() {
                   <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\
                 </head>\
                 <body>\
-                        <h1>Set time for Shot and Timershot</h1>\
-                        <h3>Shot (Click): %d% ms </h3>\
+                        <h1>Set Time for single Shot and double Shot</h1>\
+                        <h3>Single Shot (Click): %d% ms </h3>\
                         <h3><input type='text' name='date_ss' id='date_ss' size=2 autofocus>  ms</h3> \
-                        <h3>Timershot (Doubleclick): %d% ms</h3>\
+                        <h3>Double Shot (Doubleclick): %d% ms</h3>\
                         <h3><input type='text' name='date_ds' id='date_ds' size=2 autofocus>  ms</h3> \
-                        <h3>You can press and hold the Button.<br> If you do a Doubleclick it will grind the same amount again.</h3>\
+                        <h3>You can press and hold the Button for manual Grinding.<br> If you press and hold after a Click or Doubleclick it will save the Time.</h3>\
                         <div>\
                         <br><button id=\"save_button\">Save</button>\
                         </div>\
@@ -161,6 +178,7 @@ void handleRoot() {
 }
 
 void handleSave() {
+  // saving times via web
   if (server.arg("ss")!= "") {
     //Serial.println("Singleshot: " + server.arg("ss"));
     time_ss = server.arg("ss").toInt();
@@ -171,29 +189,28 @@ void handleSave() {
     time_ds = server.arg("ds").toInt();
     eeWriteInt(4, server.arg("ds").toInt());
   }
-
 }
 
 void handleWifi() {
   // handle WiFi and connect if not connected
-  static bool lastWifiStaus = false;
+  static bool lastWifiStatus = false;
   static unsigned long wifi_restart = millis();
-  unsigned long wifi_int = 500;
+  unsigned long wifi_interval = 500;
 
   if (WiFi.status() == WL_CONNECTED) {
     // Connected to WiFi
-    if (lastWifiStaus == false) {
+    if (lastWifiStatus == false) {
       // Newly connected to WiFi
       //Serial.println("WiFi connected");
       //Serial.println("IP address: ");
       //Serial.println(WiFi.localIP());
-      lastWifiStaus = true;
+      lastWifiStatus = true;
       if (!MDNS.begin("sonoffgrinder")) {             // Start the mDNS responder for esp8266.local
         //Serial.println("Error setting up MDNS responder!");
       }
       //Serial.println("mDNS responder started");
     }
-    if(millis() < wifi_restart + OVERLAYTIME) {
+    if(hideOverlay == false) {
       display.setTextAlignment(TEXT_ALIGN_RIGHT);
       display.setFont(ArialMT_Plain_10);
       display.drawString(128, 54, WiFi.localIP().toString());
@@ -205,15 +222,15 @@ void handleWifi() {
     //Serial.println("WiFi not connected");
     //Serial.print("Trying to connect to: ");
     //Serial.println(ssid);
-    if (lastWifiStaus == true) {
+    if (lastWifiStatus == true) {
       // (Re)start WiFi 
       WiFi.begin(ssid, password);
-      lastWifiStaus = false;
+      lastWifiStatus = false;
       wifi_restart = millis();
     }
     if (millis() > wifi_restart) {
-      wifi_restart = millis() + wifi_int;
-      delay(50); // pauses the sketch and allows WiFi and TCP/IP tasks to run
+      wifi_restart = millis() + wifi_interval; // next try
+      delay(10); // allow WiFi and TCP/IP tasks to run
     }
     display.setTextAlignment(TEXT_ALIGN_RIGHT);
     display.setFont(ArialMT_Plain_10);
@@ -226,33 +243,53 @@ void handleWifi() {
 void handleDisplay() {
   // Handle Display
   
-  if(clickOccured == true){
+  if(pressOccured == false && (clickOccured == true || dclickOccured == true)){
+    hideOverlay = true;
     // display grinding progress
-    display.setTextAlignment(TEXT_ALIGN_CENTER);
+    display.setTextAlignment(TEXT_ALIGN_LEFT);
+    display.setFont(ArialMT_Plain_10);
+    if(clickOccured == true) {
+      display.drawString(0, 0, "Single Shot Grinding");
+    } else if (dclickOccured == true) {
+      display.drawString(0, 0, "Double Shot Grinding");
+    }
+    display.setTextAlignment(TEXT_ALIGN_RIGHT);
     display.setFont(ArialMT_Plain_16);
-    display.drawString(64, 16, "grinding " + String(relaisTime) + " ms");
+    display.drawString(128, 16, String((millis() - relaisStart)/1000.0,2) + "/" + String(relaisTime/1000.0,2) + " s");
     display.drawProgressBar(0, 38, 127, 10, (millis() - relaisStart) / (relaisTime / 100));
     //display.drawString(64, 45, String((millis() - relaisStart) / (relaisTime / 100)) + " %");
   }
 
   if(pressOccured == true){
+    hideOverlay = true;
     // display grinding setup progress
+    display.setTextAlignment(TEXT_ALIGN_LEFT);
+    display.setFont(ArialMT_Plain_10);
+    if(clickOccured == true) {
+      display.drawString(0, 0, "Saving Single Time");
+    } else if (dclickOccured == true) {
+      display.drawString(0, 0, "Saving Double Time");
+    } else {
+      display.drawString(0, 0, "Manual Grinding");
+    }
     display.setTextAlignment(TEXT_ALIGN_RIGHT);
     display.setFont(ArialMT_Plain_16);
-    display.drawString(128, 16, "grinding " + String(millis() - relaisStart) + " ms");
-    display.setTextAlignment(TEXT_ALIGN_CENTER);
+    display.drawString(128, 16, String(millis() - relaisStart) + " ms");
     display.drawProgressBar(0, 38, 127, 10, (millis() - relaisStart) / (relaisTime / 100));
   }
 
-  if(clickOccured == false && pressOccured == false){
+  if(clickOccured == false && dclickOccured == false && pressOccured == false){
+    if(millis() < OVERLAYTIME) { 
+      hideOverlay = false;
+    }
     display.setTextAlignment(TEXT_ALIGN_RIGHT);
     display.setFont(ArialMT_Plain_16);
-    display.drawString(128, 16, "Single " + String(time_ss) + " ms");
-    display.drawString(128, 34, "Double " + String(time_ds) + " ms");
+    display.drawString(128, 16, "Single " + String(time_ss/1000.0,2) + " s");
+    display.drawString(128, 34, "Double " + String(time_ds/1000.0,2) + " s");
   }
   
   // Overlay
-  if(millis() < OVERLAYTIME) {
+  if(hideOverlay == false) {
     display.setTextAlignment(TEXT_ALIGN_LEFT);
     display.setFont(ArialMT_Plain_10);
     display.drawString(0, 0, "SonoffGrinder");
@@ -262,16 +299,6 @@ void handleDisplay() {
   }
 
   display.display();
-}
-
-void timerCallback(void *pArg) {
-  // start of timerCallback
-  digitalWrite(grinderPin, LOW);
-  //Serial.println("Timer ausgelaufen");
-  //Serial.println("Relais OFF");
-  digitalWrite(ledPin, OFF);
-  os_timer_disarm(&myTimer);
-  clickOccured = false;
 }
 
 // *******SETUP*******
@@ -339,9 +366,9 @@ void setup() {
     } else { // U_FS
       type = "filesystem";
     }
-
     // NOTE: if updating FS this would be the place to unmount FS using FS.end()
     //Serial.println("Start updating " + type);
+    digitalWrite(ledPin, ON);
   });
   ArduinoOTA.onEnd([]() {
     //Serial.println("\nEnd");
@@ -413,10 +440,18 @@ void loop() {
       holdTime = (int)button.getHoldTime(); // hold button time
     }
     if(button.read() == LOW) { // wait for button release
-      holdTime = holdTime - pressInterval; // substract press detection time from hold time
-      eeWriteInt(4, holdTime); // safe doublshot time
+      holdTime = millis() - relaisStart; // substract press detection time from hold time
+      if (clickOccured == true) {
+        eeWriteInt(0, holdTime); // safe singleshot time
+        clickOccured = false;
+        time_ss = holdTime;
+      }
+      else if (dclickOccured == true) {
+        eeWriteInt(4, holdTime); // safe doubleshot time
+        dclickOccured = false;
+        time_ds = holdTime;
+      }
       pressOccured = false;
-      time_ds = holdTime;
       os_timer_arm(&myTimer, 0, false); // instantly fire timer
       //Serial.println("Doubleshot set to " + String(holdTime, DEC) + " ms");
     }
