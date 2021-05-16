@@ -1,125 +1,146 @@
 #include <Arduino.h>
-// Libraries
 #include <ESP8266WiFi.h>
 #include <ESP8266mDNS.h>
 #include <ESP8266WebServer.h>
-#include <TTBOUNCE.h>
-#include <EEPROM.h>
-// OTA
 #include <WiFiUdp.h>
 #include <ArduinoOTA.h>
-// OLED
-#include "SSD1306Brzo.h"
+#include <EEPROM.h>
+#include <TTBOUNCE.h>
+#include <SSD1306Brzo.h>
+
+// Defines
+#define VERSION "v1.0"
+#define NAME "SonoffGrinder"
+#define SONOFFBASIC // Use Sonoff Basic default Pins
 
 #define ON LOW    // LOW is LED ON
 #define OFF HIGH  // HIGH is LED OFF
 
-#define SCL 1 // Tx Pin on Sonoff
-#define SDA 3 // Rx Pin on Sonoff
+// Configuration
+const char* cSSID     = "coffee";
+const char* cPASSWORD = "coffeecoffee";
 
-#define VERSION "v0.4"
-#define OVERLAYTIME 5*60*1000 // show additional information for this period
+const bool bFlipDisplay = true;
 
-//======SERVER PART======================================================
-const char* ssid     = "kaffee";
-const char* password = "kaffeekaffee";
-ESP8266WebServer server ( 80 );
+#ifdef SONOFFBASIC
+const int pGRINDER = 12; // Relay Pin of Sonoff
+const int pLED = 13; // LED Pin of Sonoff
+const int pBUTTON = 14; // GPIO14, last Pin on Header
+
+const int pSCL = 1; // Tx Pin on Sonoff
+const int pSDA = 3; // Rx Pin on Sonoff
+#else // Custom or Development Board
+const int pGRINDER = 12; // Relay Pin of Sonoff
+const int pLED = 16; // LED Pin of Sonoff
+const int pBUTTON = 0; // GPIO14, last Pin on Header
+
+const int pSCL = 5; // Tx Pin on Sonoff
+const int pSDA = 2; // Rx Pin on Sonoff
+#endif
+
+const unsigned long tMAX = 60000; // Maxmimum Time for grinding
+const unsigned long tOVERLAY = 60000; // show additional information for this period
+const unsigned long tDEBOUNCE = 50; // Debounce Time for Button
+const unsigned long tPRESS = 300; // Time for Button Press Detection
+
 char htmlResponse[3000];
-//======LOKALER PART======================================================
-os_timer_t myTimer;
-bool clickOccured = false;
-bool dclickOccured = false;
-bool pressOccured = false;
-bool wifiStatus = false;
-bool hideOverlay = false;
-int grinderPin = 12;
-int ledPin = 13;
-TTBOUNCE button = TTBOUNCE(14);  // GPIO14, last PIN on Header
-SSD1306Brzo  display(0x3c, SDA, SCL); // ADDRESS, SDA, SCL
 
-int time_ss = 1000;
-int time_ds = 2000;
-int time_max = 50000;
-int holdTime = 0;
-int relaisTime = 0;
-unsigned long relaisStart = 0;
+bool bClick = false;
+bool bDoubleClick = false;
+bool bPress = false;
 
-unsigned int debounceInterval = 50;
-unsigned int pressInterval = 500;
+bool bWifiConnected = true; // initialize true to start Connection
+bool bShowOverlay = true; // initialize true
+
+int tSingleShot = 5000;
+int tDualShot = 10000;
+
+int tGrindDuration = 0;
+int tGrindPeriod = 0;
+unsigned long tGrindStart = 0;
+
+os_timer_t timerGRINDER;
+
+ESP8266WebServer server (80);
+TTBOUNCE button = TTBOUNCE(pBUTTON);
+SSD1306Brzo  display(0x3c, pSDA, pSCL); // ADDRESS, SDA, SCL
 
 void click() {
-  if (digitalRead(grinderPin) == LOW) {
-    digitalWrite(grinderPin, HIGH);  // turn Relais ON
-    os_timer_arm(&myTimer, time_ss, false);
-    clickOccured = true;
-    relaisTime = time_ss;
-    relaisStart = millis();
+  if (digitalRead(pGRINDER) == LOW) {
+    digitalWrite(pGRINDER, HIGH);  // turn Relais ON
+    os_timer_arm(&timerGRINDER, tSingleShot, false);
+    bClick = true;
+    tGrindPeriod = tSingleShot;
+    tGrindStart = millis();
     //Serial.println("Clicked");
-    //Serial.println("Relais " + String(time_ss, DEC) + " ms ON");
-    digitalWrite(ledPin, ON);
+    //Serial.println("Relais " + String(tSingleShot, DEC) + " ms ON");
+    digitalWrite(pLED, ON);
   } else {
-    digitalWrite(grinderPin, LOW);
-    os_timer_disarm(&myTimer);
-    clickOccured = false;
-    dclickOccured = false;
+    digitalWrite(pGRINDER, LOW);
+    os_timer_disarm(&timerGRINDER);
+    bClick = false;
+    bDoubleClick = false;
     //Serial.println("Abort!");
     //Serial.println("Relais OFF");
-    digitalWrite(ledPin, OFF);
+    digitalWrite(pLED, OFF);
   }
 }
 
 void doubleClick() {
-  if (digitalRead(grinderPin) == LOW) {
-    digitalWrite(grinderPin, HIGH);  // turn Relais ON
-    os_timer_arm(&myTimer, time_ds, false);
-    dclickOccured = true;
-    relaisTime = time_ds;
-    relaisStart = millis();
+  if (digitalRead(pGRINDER) == LOW) {
+    digitalWrite(pGRINDER, HIGH);  // turn Relais ON
+    os_timer_arm(&timerGRINDER, tDualShot, false);
+    bDoubleClick = true;
+    tGrindPeriod = tDualShot;
+    tGrindStart = millis();
     //Serial.println("DoubleClicked");
-    //Serial.println("Relais " + String(time_ds, DEC) + " ms ON");
-    digitalWrite(ledPin, ON);
+    //Serial.println("Relais " + String(tDualShot, DEC) + " ms ON");
+    digitalWrite(pLED, ON);
   } else {
-    digitalWrite(grinderPin, LOW);
-    os_timer_disarm(&myTimer);
-    clickOccured = false;
-    dclickOccured = false;
+    digitalWrite(pGRINDER, LOW);
+    os_timer_disarm(&timerGRINDER);
+    bClick = false;
+    bDoubleClick = false;
     //Serial.println("Abort!");
     //Serial.println("Relais OFF");
-    digitalWrite(ledPin, OFF);
+    digitalWrite(pLED, OFF);
   }
 }
 
 void press() {
-  if(digitalRead(grinderPin) == LOW || (clickOccured == true || dclickOccured == true)) {
-    digitalWrite(grinderPin, HIGH);  // turn Relais ON
-    os_timer_arm(&myTimer, time_max, false);
-    pressOccured = true;
-    relaisTime = time_max;
-    if (clickOccured == false && dclickOccured == false) {
-      relaisStart = millis();
+  if(digitalRead(pGRINDER) == LOW || (bClick == true || bDoubleClick == true)) {
+    digitalWrite(pGRINDER, HIGH);  // turn Relais ON
+    bPress = true;
+    tGrindPeriod = tMAX;
+    if (bClick == false && bDoubleClick == false) {
+      os_timer_arm(&timerGRINDER, tMAX, false);
+      tGrindStart = millis(); // only initialize if manual Mode
+    } else {
+      os_timer_arm(&timerGRINDER, tMAX - (millis() - tGrindStart), false);
     }
     //Serial.println("Pressed");
     //Serial.println("Relais ON");
-    digitalWrite(ledPin, ON);
+    digitalWrite(pLED, ON);
   } else {
-    digitalWrite(grinderPin, LOW);
-    os_timer_disarm(&myTimer);
-    pressOccured = false;
+    digitalWrite(pGRINDER, LOW);
+    os_timer_disarm(&timerGRINDER);
+    bPress = false;
     //Serial.println("Abort!");
     //Serial.println("Relais OFF");
-    digitalWrite(ledPin, OFF);
+    digitalWrite(pLED, OFF);
   }
 }
 
 void timerCallback(void *pArg) {
   // start of timerCallback
-  digitalWrite(grinderPin, LOW);
-  //Serial.println("Timer ausgelaufen");
+  digitalWrite(pGRINDER, LOW);
+  //Serial.println("Timer expired");
   //Serial.println("Relais OFF");
-  digitalWrite(ledPin, OFF);
-  os_timer_disarm(&myTimer);
-  clickOccured = false;
-  dclickOccured = false; // TODO besser?
+  digitalWrite(pLED, OFF);
+  os_timer_disarm(&timerGRINDER);
+  bClick = false;
+  bDoubleClick = false;
+  bPress = false;
 }
 
 void eeWriteInt(int pos, int val) {
@@ -151,9 +172,9 @@ void handleRoot() {
                 </head>\
                 <body>\
                         <h1>Set Time for single Shot and double Shot</h1>\
-                        <h3>Single Shot (Click): %d% ms </h3>\
+                        <h3>Single Shot (Click): %d ms </h3>\
                         <h3><input type='text' name='date_ss' id='date_ss' size=2 autofocus>  ms</h3> \
-                        <h3>Double Shot (Doubleclick): %d% ms</h3>\
+                        <h3>Double Shot (Doubleclick): %d ms</h3>\
                         <h3><input type='text' name='date_ds' id='date_ds' size=2 autofocus>  ms</h3> \
                         <h3>You can press and hold the Button for manual Grinding.<br> If you press and hold after a Click or Doubleclick it will save the Time.</h3>\
                         <div>\
@@ -173,7 +194,7 @@ void handleRoot() {
                     });\
                   </script>\
                 </body>\
-              </html>", time_ss, time_ds);
+              </html>", tSingleShot, tDualShot);
     server.send(200, "text/html", htmlResponse);
 }
 
@@ -181,122 +202,125 @@ void handleSave() {
   // saving times via web
   if (server.arg("ss")!= "") {
     //Serial.println("Singleshot: " + server.arg("ss"));
-    time_ss = server.arg("ss").toInt();
+    tSingleShot = server.arg("ss").toInt();
     eeWriteInt(0, server.arg("ss").toInt());
   }
   if (server.arg("ds")!= "") {
     //Serial.println("Doubleshot: " + server.arg("ds"));
-    time_ds = server.arg("ds").toInt();
+    tDualShot = server.arg("ds").toInt();
     eeWriteInt(4, server.arg("ds").toInt());
   }
 }
 
 void handleWifi() {
   // handle WiFi and connect if not connected
-  static bool lastWifiStatus = false;
-  static unsigned long wifi_restart = millis();
-  unsigned long wifi_interval = 500;
 
   if (WiFi.status() == WL_CONNECTED) {
     // Connected to WiFi
-    if (lastWifiStatus == false) {
+    if (bWifiConnected == false) {
       // Newly connected to WiFi
       //Serial.println("WiFi connected");
       //Serial.println("IP address: ");
       //Serial.println(WiFi.localIP());
-      lastWifiStatus = true;
-      if (!MDNS.begin("sonoffgrinder")) {             // Start the mDNS responder for esp8266.local
+      bWifiConnected = true;
+      if (!MDNS.begin(NAME)) { // Start the mDNS responder for esp8266.local
         //Serial.println("Error setting up MDNS responder!");
       }
       //Serial.println("mDNS responder started");
     }
-    if(hideOverlay == false) {
+  }
+
+  if (WiFi.status() != WL_CONNECTED) {
+    if (bWifiConnected == true) {
+      // (Re)start WiFi 
+      //Serial.println("WiFi not connected");
+      //Serial.print("Trying to connect to: ");
+      //Serial.println(cSSID);
+      WiFi.mode(WIFI_STA); // explicitly set the ESP8266 to be a WiFi-Client
+      WiFi.persistent(false); // do not store Settings in EEPROM
+      WiFi.hostname(NAME);
+      WiFi.begin(cSSID, cPASSWORD);
+      bWifiConnected = false;
+    }
+  }
+
+  yield(); // allow WiFi and TCP/IP Tasks to run
+  delay(10); // yield not sufficient
+}
+
+void handleDisplay() {
+  display.clear();
+
+  if((bClick == true || bDoubleClick == true) && bPress == false){
+    // display timer grinding Progress
+    bShowOverlay = false;
+    display.setTextAlignment(TEXT_ALIGN_LEFT);
+    display.setFont(ArialMT_Plain_10);
+    if(bClick == true) {
+      display.drawString(0, 0, "Single Shot Grinding");
+    } else if (bDoubleClick == true) {
+      display.drawString(0, 0, "Double Shot Grinding");
+    }
+    display.setTextAlignment(TEXT_ALIGN_RIGHT);
+    display.setFont(ArialMT_Plain_16);
+    display.drawString(128, 16, String((millis() - tGrindStart)/1000.0,2) + "/" + String(tGrindPeriod/1000.0,2) + " s");
+    display.drawProgressBar(0, 38, 127, 10, (millis() - tGrindStart) / (tGrindPeriod / 100));
+  }
+
+  if(bPress == true){
+    // display manual grinding and setup Progress
+    bShowOverlay = false;
+    display.setTextAlignment(TEXT_ALIGN_LEFT);
+    display.setFont(ArialMT_Plain_10);
+    if(bClick == true) {
+      display.drawString(0, 0, "Saving Single Shot Time");
+    } else if (bDoubleClick == true) {
+      display.drawString(0, 0, "Saving Double Shot Time");
+    } else {
+      display.drawString(0, 0, "Manual Grinding");
+    }
+    display.setTextAlignment(TEXT_ALIGN_RIGHT);
+    display.setFont(ArialMT_Plain_16);
+    display.drawString(128, 16, String(millis() - tGrindStart) + " ms");
+    display.drawProgressBar(0, 38, 127, 10, (millis() - tGrindStart) / (tGrindPeriod / 100));
+  }
+
+  if(bClick == false && bDoubleClick == false && bPress == false){
+    // default Screen
+    if(millis() > tOVERLAY) { 
+      bShowOverlay = false; // disable Overlay
+    } else {
+      bShowOverlay = true; // reenable Overlay
+    }
+    display.setTextAlignment(TEXT_ALIGN_RIGHT);
+    display.setFont(ArialMT_Plain_16);
+    display.drawString(128, 16, "Single " + String(tSingleShot/1000.0,2) + " s");
+    display.drawString(128, 34, "Double " + String(tDualShot/1000.0,2) + " s");
+  }
+  
+  if(bShowOverlay == true) {
+    // display additional Information in Overlay
+    display.setTextAlignment(TEXT_ALIGN_LEFT);
+    display.setFont(ArialMT_Plain_10);
+    display.drawString(0, 0, NAME);
+    display.setTextAlignment(TEXT_ALIGN_RIGHT);
+    display.setFont(ArialMT_Plain_10);
+    display.drawString(128, 0, VERSION);
+
+    if (bWifiConnected == true) {
+      // show IP when connected
       display.setTextAlignment(TEXT_ALIGN_RIGHT);
       display.setFont(ArialMT_Plain_10);
       display.drawString(128, 54, WiFi.localIP().toString());
     }
   }
 
-  if (WiFi.status() != WL_CONNECTED) {
-    // Waiting to connect to a WiFi network
-    //Serial.println("WiFi not connected");
-    //Serial.print("Trying to connect to: ");
-    //Serial.println(ssid);
-    if (lastWifiStatus == true) {
-      // (Re)start WiFi 
-      WiFi.begin(ssid, password);
-      lastWifiStatus = false;
-      wifi_restart = millis();
+  if (bWifiConnected == false) {
+      // show SSID when not connected
+      display.setTextAlignment(TEXT_ALIGN_RIGHT);
+      display.setFont(ArialMT_Plain_10);
+      display.drawString(128, 54, cSSID);
     }
-    if (millis() > wifi_restart) {
-      wifi_restart = millis() + wifi_interval; // next try
-      delay(10); // allow WiFi and TCP/IP tasks to run
-    }
-    display.setTextAlignment(TEXT_ALIGN_RIGHT);
-    display.setFont(ArialMT_Plain_10);
-    display.drawString(128, 54, ssid);
-  }
-
-  yield();
-}
-
-void handleDisplay() {
-  // Handle Display
-  
-  if(pressOccured == false && (clickOccured == true || dclickOccured == true)){
-    hideOverlay = true;
-    // display grinding progress
-    display.setTextAlignment(TEXT_ALIGN_LEFT);
-    display.setFont(ArialMT_Plain_10);
-    if(clickOccured == true) {
-      display.drawString(0, 0, "Single Shot Grinding");
-    } else if (dclickOccured == true) {
-      display.drawString(0, 0, "Double Shot Grinding");
-    }
-    display.setTextAlignment(TEXT_ALIGN_RIGHT);
-    display.setFont(ArialMT_Plain_16);
-    display.drawString(128, 16, String((millis() - relaisStart)/1000.0,2) + "/" + String(relaisTime/1000.0,2) + " s");
-    display.drawProgressBar(0, 38, 127, 10, (millis() - relaisStart) / (relaisTime / 100));
-    //display.drawString(64, 45, String((millis() - relaisStart) / (relaisTime / 100)) + " %");
-  }
-
-  if(pressOccured == true){
-    hideOverlay = true;
-    // display grinding setup progress
-    display.setTextAlignment(TEXT_ALIGN_LEFT);
-    display.setFont(ArialMT_Plain_10);
-    if(clickOccured == true) {
-      display.drawString(0, 0, "Saving Single Time");
-    } else if (dclickOccured == true) {
-      display.drawString(0, 0, "Saving Double Time");
-    } else {
-      display.drawString(0, 0, "Manual Grinding");
-    }
-    display.setTextAlignment(TEXT_ALIGN_RIGHT);
-    display.setFont(ArialMT_Plain_16);
-    display.drawString(128, 16, String(millis() - relaisStart) + " ms");
-    display.drawProgressBar(0, 38, 127, 10, (millis() - relaisStart) / (relaisTime / 100));
-  }
-
-  if(clickOccured == false && dclickOccured == false && pressOccured == false){
-    if(millis() < OVERLAYTIME) { 
-      hideOverlay = false;
-    }
-    display.setTextAlignment(TEXT_ALIGN_RIGHT);
-    display.setFont(ArialMT_Plain_16);
-    display.drawString(128, 16, "Single " + String(time_ss/1000.0,2) + " s");
-    display.drawString(128, 34, "Double " + String(time_ds/1000.0,2) + " s");
-  }
-  
-  // Overlay
-  if(hideOverlay == false) {
-    display.setTextAlignment(TEXT_ALIGN_LEFT);
-    display.setFont(ArialMT_Plain_10);
-    display.drawString(0, 0, "SonoffGrinder");
-    display.setTextAlignment(TEXT_ALIGN_RIGHT);
-    display.setFont(ArialMT_Plain_10);
-    display.drawString(128, 0, VERSION);
-  }
 
   display.display();
 }
@@ -305,45 +329,36 @@ void handleDisplay() {
 void setup() {
   //Serial.begin(115200); // Start serial
 
-//======HARDWARE PART======================================================
-  pinMode(grinderPin, OUTPUT);      // define grinder output pin
-  digitalWrite(grinderPin, LOW);    // turn Relais OFF
-  pinMode(ledPin, OUTPUT);
-  digitalWrite(ledPin, ON);         // turn LED ON at start
+  pinMode(pGRINDER, OUTPUT);      // define Grinder output Pin
+  digitalWrite(pGRINDER, LOW);    // turn Relais OFF
+  pinMode(pLED, OUTPUT);
+  digitalWrite(pLED, ON);         // turn LED ON at start
 
-  pinMode(14, INPUT_PULLUP);        // Bugfix ttbounce button.enablePullup(); not working
+  pinMode(pBUTTON, INPUT_PULLUP);        // Bugfix ttbounce button.enablePullup(); not working
+
+  handleWifi();
 
   display.init();
-  display.flipScreenVertically();
+  if(bFlipDisplay == true) {display.flipScreenVertically();}
   handleDisplay();
 
-//======Wifi PART==========================================================
-  //Serial.print("Connecting to: ");
-  //Serial.println(ssid);
-  WiFi.mode(WIFI_STA); // explicitly set the ESP8266 to be a WiFi-client
-  WiFi.persistent(false); // do not store settings in EEPROM
-  WiFi.begin(ssid, password);
-  yield();
-
-//======SERVER PART=======================================================
   server.on("/", handleRoot );
   server.on("/save", handleSave);
-
   server.begin();
-  //Serial.println ( "HTTP server started" );
+  //Serial.println ( "HTTP Server started" );
 
-//======LOKALER PART======================================================
-  os_timer_setfn(&myTimer, timerCallback, NULL);
-  button.setActiveLow(); button.enablePullup();   // button from GPIO directly to GND, ebable internal pullup
-  button.setDebounceInterval(debounceInterval);
-  button.setPressInterval(pressInterval);
-  button.attachClick(click);                      //attach the click method to the click event
-  button.attachDoubleClick(doubleClick);          //attach the double click method to the double click event
-  button.attachPress(press);                      //attach the press method to the press event
+  os_timer_setfn(&timerGRINDER, timerCallback, NULL);
 
-  EEPROM.begin(8);  //Initialize EEPROM
-  time_ss = eeGetInt(0);
-  time_ds = eeGetInt(4);
+  button.setActiveLow(); button.enablePullup();   // Button from GPIO directly to GND, ebable internal pullup
+  button.setDebounceInterval(tDEBOUNCE);
+  button.setPressInterval(tPRESS);
+  button.attachClick(click);                      // attach the Click Method to the Click Event
+  button.attachDoubleClick(doubleClick);          // attach the double Click Method to the double Click Event
+  button.attachPress(press);                      // attach the Press Method to the Press Event
+
+  EEPROM.begin(8);  // Initialize EEPROM
+  tSingleShot = eeGetInt(0);
+  tDualShot = eeGetInt(4);
 
 //======OTA PART=========================================================
   // Port defaults to 8266
@@ -368,7 +383,8 @@ void setup() {
     }
     // NOTE: if updating FS this would be the place to unmount FS using FS.end()
     //Serial.println("Start updating " + type);
-    digitalWrite(ledPin, ON);
+    digitalWrite(pLED, ON);
+    os_timer_arm(&timerGRINDER, 0, false); // instantly fire Timer
   });
   ArduinoOTA.onEnd([]() {
     //Serial.println("\nEnd");
@@ -420,43 +436,38 @@ void setup() {
   });
   ArduinoOTA.begin();
 
-  digitalWrite(ledPin, OFF);        // turn LED OFF after Setup
+  digitalWrite(pLED, OFF);        // turn LED OFF after Setup
 }
 
 // *******LOOP*******
 void loop() {
-  display.clear();
-//======SERVER PART======================================================
-  handleWifi(); // check Wifi
   ArduinoOTA.handle();
+
   server.handleClient();
-//======LOKALER PART======================================================
+  
   button.update();
 
-  if(pressOccured == true) {
-    // press was detected
-    if (button.getHoldTime() > 0) {
-      // while button is pressed
-      holdTime = (int)button.getHoldTime(); // hold button time
-    }
-    if(button.read() == LOW) { // wait for button release
-      holdTime = millis() - relaisStart; // substract press detection time from hold time
-      if (clickOccured == true) {
-        eeWriteInt(0, holdTime); // safe singleshot time
-        clickOccured = false;
-        time_ss = holdTime;
+  if(bPress == true) {
+    // Press was detected
+    if(button.read() == LOW) { // wait for Button release
+      tGrindDuration = millis() - tGrindStart;
+      os_timer_arm(&timerGRINDER, 0, false); // instantly fire Timer
+      bPress = false;
+      if (bClick == true) {
+        eeWriteInt(0, tGrindDuration); // safe single Shot Time
+        bClick = false;
+        tSingleShot = tGrindDuration;
+        //Serial.println("Single Shot set to " + String(tGrindDuration, DEC) + " ms");
       }
-      else if (dclickOccured == true) {
-        eeWriteInt(4, holdTime); // safe doubleshot time
-        dclickOccured = false;
-        time_ds = holdTime;
+      else if (bDoubleClick == true) {
+        eeWriteInt(4, tGrindDuration); // safe double Shot Time
+        bDoubleClick = false;
+        tDualShot = tGrindDuration;
+        //Serial.println("Double Shot set to " + String(tGrindDuration, DEC) + " ms");
       }
-      pressOccured = false;
-      os_timer_arm(&myTimer, 0, false); // instantly fire timer
-      //Serial.println("Doubleshot set to " + String(holdTime, DEC) + " ms");
     }
   }
 
+  handleWifi();
   handleDisplay();
-  delay(100);
 }
