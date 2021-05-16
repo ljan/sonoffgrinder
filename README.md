@@ -1,14 +1,14 @@
-# sonoffgrinder
+# SonoffGrinder
 This is a Coffee Grinder Controller with a Sonoff Basic as a Timer.
 
 ## Setup
 Connect the Motor of the Coffee Grinder to the Output of the Sonoff and the Pushbutton to GPIO 14 and Ground.
-Connect the TX to SCK and RX to SDA of the Display. (0,96" OLED)
+Connect TX to SCK and RX to SDA of the Display. (0,96" OLED)
 
 
 ## Usage
 The Controller tries to connect to specified WiFi. Just set up your local Wifi in Code before flashing the Sonoff.
-You can connect to the Sonoff by typing "sonoffgrinder/" or the IP in your Webbrowser.
+You can connect to the Sonoff by typing "SonoffGrinder/" or the IP in your Webbrowser.
 The Webinterface is presented to programm the grinding Time for single and double Shot.
 
 There are 3 Operation-Modes:
@@ -20,7 +20,7 @@ If you push the button again while the machine is grinding the grinder will stop
 
 Saving new Times:
 - Start Single- or Doubleshot grinding
-- Push and hold the Button again as long as you want
+- Push the Button again and hold as long as you want
 - New grinding Time is saved for Single- or Doubleshot
 
 Thanks to timo.helfer @ www.kaffeenetz.de for the inspiration and codebase.
